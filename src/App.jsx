@@ -147,6 +147,7 @@ function App() {
   const [user, setUser] = useState(null);
   const [tools, setTools] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [authError, setAuthError] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('Все');
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -175,20 +176,22 @@ function App() {
         await signInAnonymously(auth);
       } catch (err) {
         console.error("Ошибка авторизации Firebase:", err);
+        setAuthError("Ошибка входа! Включите 'Anonymous' в Authentication (консоль Firebase).");
+        setLoading(false);
       }
     };
     initAuth();
     
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
       setUser(currentUser);
-      if (!currentUser) setLoading(true); // Показываем загрузку, пока нет юзера
+      if (!currentUser && !authError) setLoading(true); 
     });
     return () => unsubscribe();
-  }, []);
+  }, [authError]);
 
-  // 2. Получение данных (Только когда user существует!)
+  // 2. Получение данных
   useEffect(() => {
-    if (!user) return; // Ждем авторизацию
+    if (!user) return; 
 
     const q = query(collection(db, 'ai_tools'));
     
@@ -205,6 +208,9 @@ function App() {
       (error) => {
         console.error("Ошибка получения данных:", error);
         setLoading(false); 
+        if (error.code === 'permission-denied') {
+            setAuthError("Нет доступа к данным! Проверьте Firestore Rules.");
+        }
       }
     );
 
@@ -263,6 +269,9 @@ function App() {
     setDeleteError(null);
     setDeleteModalOpen(true);
   };
+
+  // Удалена дублирующая функция handleDeleteTool, которая принимала id
+  // Оставлена только версия для модального окна
 
   const handleDeleteTool = async () => {
     if (!itemToDelete) return;
@@ -452,6 +461,17 @@ function App() {
     );
   }
 
+  if (authError) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-screen bg-red-50 text-red-700 p-4 text-center">
+        <AlertCircle size={48} className="mb-4 text-red-500" />
+        <h2 className="text-xl font-bold mb-2">Ошибка подключения</h2>
+        <p className="max-w-md">{authError}</p>
+        <p className="mt-4 text-sm text-red-600">Проверьте консоль браузера для деталей.</p>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-gray-50 text-slate-800 font-sans">
       <nav className="bg-white border-b border-gray-200 sticky top-0 z-20 shadow-sm">
@@ -498,7 +518,7 @@ function App() {
       </div>
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Кнопка начальной загрузки (появляется если пусто или мало записей) */}
+        {/* Кнопка начальной загрузки */}
         {tools.length < 10 && !loading && (
           <div className="bg-blue-50 border border-blue-100 rounded-xl p-6 text-center animate-fade-in mb-8">
             <h3 className="text-lg font-semibold text-blue-800 mb-2">
@@ -594,7 +614,6 @@ function App() {
         )}
       </main>
 
-      {/* Модальное окно редактирования/создания */}
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-fade-in">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden transform transition-all scale-100">
